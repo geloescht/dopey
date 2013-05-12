@@ -512,6 +512,7 @@ class ToolWidget(gtk.VBox):
         self.ani.framerate = adj.get_value()
 
     def on_jacktransport_toggled(self, checkbox):
+        self.ani.stop_animation()
         self.ani.transport_enabled = checkbox.get_active()
 
         if checkbox.get_active():
