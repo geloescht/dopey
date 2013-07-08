@@ -426,6 +426,16 @@ Perhaps an increasing amount.
         <accelerator key="Page_Down" modifiers="GDK_CONTROL_MASK"/>
       </child>
       <child>
+        <object class="GtkAction" id="NewLayerGroup">
+          <property name="icon-name">gtk-add</property>
+          <property name="label" translatable="yes"
+            context="Menu|Layer|">New Group</property>
+          <property name="tooltip" translatable="yes"
+            >Put the current layer into a group</property>
+          <signal name="activate" handler="new_layer_group_cb"/>
+        </object>
+      </child>
+      <child>
         <object class="GtkAction" id="MergeLayer">
           <!-- FIXME: need a better icon -->
           <property name="icon-name">gtk-dnd-multiple</property>
@@ -1103,17 +1113,9 @@ Perhaps an increasing amount.
       <child>
         <object class="GtkAction" id="About">
           <property name="label" translatable="yes"
-            context="Menu|Help|">About Dopey</property>
-          <property name="icon-name">gtk-about</property>
-          <signal name="activate" handler="about_cb"/>
-        </object>
-      </child>
-      <child>
-        <object class="GtkAction" id="AboutMyPaint">
-          <property name="label" translatable="yes"
             context="Menu|Help|">About MyPaint</property>
           <property name="icon-name">gtk-about</property>
-          <signal name="activate" handler="about_mypaint_cb"/>
+          <signal name="activate" handler="about_cb"/>
         </object>
       </child>
       <!-- Debugging menu -->

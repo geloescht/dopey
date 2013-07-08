@@ -58,18 +58,19 @@ class ToolWidget (gtk.VBox):
 
         # Layer treeview
         # The 'object' column is a layer. All displayed columns use data from it.
-        store = self.liststore = gtk.ListStore(object)
+        store = self.liststore = gtk.TreeStore(object)
         store.connect("row-deleted", self.liststore_drag_row_deleted_cb)
         view = self.treeview = gtk.TreeView(store)
         view.connect("cursor-changed", self.treeview_cursor_changed_cb)
         view.set_reorderable(True)
+        view.set_level_indentation(5)
         view.set_headers_visible(False)
         view.connect("button-press-event", self.treeview_button_press_cb)
         view_scroll = gtk.ScrolledWindow()
         view_scroll.set_shadow_type(gtk.SHADOW_ETCHED_IN)
         view_scroll.set_policy(gtk.POLICY_NEVER, gtk.POLICY_AUTOMATIC)
         view_scroll.add(view)
-
+        
         renderer = gtk.CellRendererPixbuf()
         col = self.visible_col = gtk.TreeViewColumn(_("Visible"))
         col.pack_start(renderer, expand=False)
@@ -87,6 +88,7 @@ class ToolWidget (gtk.VBox):
         col.pack_start(renderer, expand=True)
         col.set_cell_data_func(renderer, self.layer_name_datafunc)
         view.append_column(col)
+        view.set_expander_column(col)
 
         # Controls for the current layer
 
@@ -124,6 +126,7 @@ class ToolWidget (gtk.VBox):
         # Layer list action buttons
 
         add_action = self.app.find_action("NewLayerFG")
+        group_action = self.app.find_action("NewLayerGroup")
         move_up_action = self.app.find_action("RaiseLayerInStack")
         move_down_action = self.app.find_action("LowerLayerInStack")
         merge_down_action = self.app.find_action("MergeLayer")
@@ -131,6 +134,7 @@ class ToolWidget (gtk.VBox):
         duplicate_action = self.app.find_action("DuplicateLayer")
 
         add_button = self.add_button = action_button(add_action)
+        group_button = self.group_button = action_button(group_action)
         move_up_button = self.move_up_button = action_button(move_up_action)
         move_down_button = self.move_down_button = action_button(move_down_action)
         merge_down_button = self.merge_down_button = action_button(merge_down_action)
@@ -139,6 +143,7 @@ class ToolWidget (gtk.VBox):
 
         buttons_hbox = gtk.HBox()
         buttons_hbox.pack_start(add_button)
+        buttons_hbox.pack_start(group_button)
         buttons_hbox.pack_start(move_up_button)
         buttons_hbox.pack_start(move_down_button)
         buttons_hbox.pack_start(duplicate_button)
@@ -166,7 +171,13 @@ class ToolWidget (gtk.VBox):
         # Observe strokes, and scroll to the highlighted row when the user
         # draws something.
         doc.stroke_observers.append(self.on_stroke)
-
+    
+    def fill_liststore(self, stack, it=None):
+        for layer in stack:
+            newit = self.liststore.prepend(it, [layer])
+            if layer.is_stack:
+                self.fill_liststore(layer, newit)
+                
 
     def update(self, doc):
         if self.is_updating:
@@ -175,13 +186,11 @@ class ToolWidget (gtk.VBox):
 
         # Update the liststore to match the master layers list in doc
         current_layer = doc.get_current_layer()
-        liststore_layers = [row[0] for row in self.liststore]
-        liststore_layers.reverse()
-        if doc.layers != liststore_layers:
-            self.liststore.clear()
-            for layer in doc.layers:
-                self.liststore.prepend([layer])
-
+        #FIXME: does not check if update is neccessary
+        self.liststore.clear()
+        self.fill_liststore(doc.layers)
+        self.treeview.expand_all() #FIXME: find a way to preserve the expanded-state  in updates
+        
         # Queue a selection update
         # This must be queued with gobject.idle_add to avoid glitches in the
         # update after dragging the current row downwards.
@@ -211,7 +220,13 @@ class ToolWidget (gtk.VBox):
         doc = self.app.doc.model
 
         # Move selection line to the model's current layer and scroll to it
-        model_sel_path = (len(doc.layers) - (doc.layer_idx + 1), )
+        model_sel_path = []
+        layer = doc.layer
+        while layer.parent is not None:
+            model_sel_path.append(len(layer.parent) - layer.get_index() - 1)
+            layer = layer.parent
+        model_sel_path.reverse()
+
         if pygtkcompat.USE_GTK3:
             model_sel_path = ":".join([str(s) for s in model_sel_path])
             model_sel_path = gtk.TreePath.new_from_string(model_sel_path)
@@ -259,8 +274,7 @@ class ToolWidget (gtk.VBox):
         layer = store.get_value(t_iter, 0)
         doc = self.app.doc
         if doc.model.get_current_layer() != layer:
-            idx = doc.model.layers.index(layer)
-            doc.model.select_layer(idx)
+            doc.model.select_layer(layer)
             doc.layerblink_state.activate()
 
 
@@ -273,13 +287,13 @@ class ToolWidget (gtk.VBox):
         clicked_path, clicked_col, cell_x, cell_y = path_info
         if pygtkcompat.USE_GTK3:
             clicked_path = clicked_path.get_indices()
-        layer, = self.liststore[clicked_path[0]]
+        layer, = self.liststore[clicked_path]
         doc = self.app.doc.model
         if clicked_col is self.visible_col:
             doc.set_layer_visibility(not layer.visible, layer)
             self.treeview.queue_draw()
             return True
-        elif clicked_col is self.locked_col:
+        elif clicked_col is self.locked_col and not layer.is_stack:
             doc.set_layer_locked(not layer.locked, layer)
             self.treeview.queue_draw()
             return True
@@ -307,7 +321,7 @@ class ToolWidget (gtk.VBox):
         if new_order != doc.layers:
             doc.reorder_layers(new_order)
         else:
-            doc.select_layer(doc.layer_idx)
+            doc.select_layer(doc.layer)
             # otherwise the current layer selection is visually lost
 
 
@@ -361,7 +375,9 @@ class ToolWidget (gtk.VBox):
     def layer_locked_datafunc(self, column, renderer, model, tree_iter,
                               *data_etc):
         layer = model.get_value(tree_iter, 0)
-        if layer.locked:
+        if layer.is_stack:
+            pixbuf = self.app.pixmaps.group
+        elif layer.locked:
             pixbuf = self.app.pixmaps.lock_closed
         else:
             pixbuf = self.app.pixmaps.lock_open

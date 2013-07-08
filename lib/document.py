@@ -70,7 +70,7 @@ class Document():
         if not brushinfo:
             brushinfo = brush.BrushInfo()
             brushinfo.load_defaults()
-        self.layers = []
+        self.layers = layer.LayerStack()
         self.brush = brush.Brush(brushinfo)
         self.ani = animation.Animation(self)
 
@@ -92,10 +92,23 @@ class Document():
         # Used by move_frame() to accumulate values
         self._frame_dx = 0.0
         self._frame_dy = 0.0
-
+    
+    #transitional getter and setter for layer index
+    @property
+    def layer_idx(self):
+        if self.layer is None:
+            return None
+        return self.layer.get_index()
+    
+    @layer_idx.setter
+    def layer_idx(self, idx):
+        if idx is None:
+            self.layer = None
+        else:
+            self.layer = self.layers[idx]
+    
     def move_current_layer(self, dx, dy):
-        layer = self.layers[self.layer_idx]
-        layer.translate(dx, dy)
+        self.layer.translate(dx, dy)
 
     def get_frame(self):
         return self._frame
@@ -161,9 +174,10 @@ class Document():
         self.command_stack = command.CommandStack()
         self.command_stack.stack_observers = self.command_stack_observers
         self.set_background(self.default_background)
-        self.layers = []
-        self.layer_idx = None
+        self.layers = layer.LayerStack()
+        self.layer = None
         self.add_layer(0)
+        self.layer = self.layers[0]
         # disallow undo of the first layer
         self.command_stack.clear()
         self.unsaved_painting_time = 0.0
@@ -176,9 +190,7 @@ class Document():
         self.call_doc_observers()
 
     def get_current_layer(self):
-        return self.layers[self.layer_idx]
-    layer = property(get_current_layer)
-
+        return self.layer
 
     def split_stroke(self):
         """Splits the current stroke, announcing the newly stacked stroke
@@ -215,19 +227,18 @@ class Document():
         # stroke in the strokemap.)
         if settings - lightweight_settings:
             self.split_stroke()
-
-    def select_layer(self, idx):
-        self.do(command.SelectLayer(self, idx))
-
+    
+    def select_layer(self, layer):
+        self.do(command.SelectLayer(self, layer))
+    
     def record_layer_move(self, layer, dx, dy):
-        layer_idx = self.layers.index(layer)
-        self.do(command.MoveLayer(self, layer_idx, dx, dy, True))
+        self.do(command.MoveLayer(self, layer, dx, dy, True))
 
-    def move_layer(self, was_idx, new_idx, select_new=False):
-        self.do(command.ReorderSingleLayer(self, was_idx, new_idx, select_new))
+    def move_layer(self, layer, new_idx, select_new=False):
+        self.do(command.ReorderSingleLayer(self, layer, new_idx, select_new))
 
-    def duplicate_layer(self, insert_idx=None, name=''):
-        self.do(command.DuplicateLayer(self, insert_idx, name))
+    def duplicate_layer(self, layer, name=''):
+        self.do(command.DuplicateLayer(self, layer, name))
 
     def reorder_layers(self, new_layers):
         self.do(command.ReorderLayers(self, new_layers))
@@ -404,9 +415,11 @@ class Document():
         return dst
 
 
-    def add_layer(self, insert_idx=None, after=None, name=''):
-        self.do(command.AddLayer(self, insert_idx, after, name))
-
+    def add_layer(self, insert_idx=None, after=None, name='', stack=None):
+        self.do(command.AddLayer(self, insert_idx, after, name, stack))
+    
+    def add_group(self, layer, name=''):
+        self.do(command.AddGroup(self, layer, name))
 
     def remove_layer(self,layer=None):
         self.do(command.RemoveLayer(self, layer))
@@ -414,15 +427,14 @@ class Document():
 
     def rename_layer(self, layer, name):
         self.do(command.RenameLayer(self, name, layer))
-
+    
     def convert_layer_to_normal_mode(self):
         self.do(command.ConvertLayerToNormalMode(self, self.layer))
 
     def merge_layer_down(self):
-        dst_idx = self.layer_idx - 1
-        if dst_idx < 0:
+        if self.layer is self.layers[0]: #cannot merge down last layer
             return False
-        self.do(command.MergeLayer(self, dst_idx))
+        self.do(command.MergeLayer(self, self.layers[self.layer_idx-1]))
         return True
 
 
@@ -918,7 +930,7 @@ class Document():
 
         if len(self.layers) > 1:
             # remove the still present initial empty top layer
-            self.select_layer(len(self.layers)-1)
+            self.select_layer(self.layers[-1])
             self.remove_layer()
             # this leaves the topmost layer selected
 
@@ -929,10 +941,7 @@ class Document():
             self.ani.load_xsheet(filename)
 
         if selected_layer is not None:
-            for i, layer in zip(range(len(self.layers)), self.layers):
-                if layer is selected_layer:
-                    self.select_layer(i)
-                    break
+            self.select_layer(selected_layer)
 
         z.close()
 

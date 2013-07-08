@@ -399,7 +399,7 @@ class Document (CanvasController):
                     return
             return
         x, y = self.tdw.get_cursor_in_model_coordinates()
-        for idx, layer in reversed(list(enumerate(self.model.layers))):
+        for layer in reversed(self.model.layers.get_flat_list()):
             if layer.locked:
                 continue
             if not layer.visible:
@@ -407,7 +407,7 @@ class Document (CanvasController):
             alpha = layer.get_alpha (x, y, 5) * layer.effective_opacity
             if alpha > 0.1:
                 old_layer = self.model.layer
-                self.model.select_layer(idx)
+                self.model.select_layer(layer)
                 if self.model.layer != old_layer:
                     self.layerblink_state.activate()
 
@@ -439,18 +439,18 @@ class Document (CanvasController):
         self.model.convert_layer_to_normal_mode()
 
     def layer_bg_cb(self, action):
-        idx = self.model.layer_idx - 1
+        idx = self.model.layer.get_index() - 1
         if idx < 0:
             return
-        self.model.select_layer(idx)
+        self.model.select_layer(self.model.layer.parent[idx])
         self.layerblink_state.activate(action)
 
 
     def layer_fg_cb(self, action):
-        idx = self.model.layer_idx + 1
-        if idx >= len(self.model.layers):
+        idx = self.model.layer.get_index()
+        if idx >= len(self.model.layer.parent):
             return
-        self.model.select_layer(idx)
+        self.model.select_layer(self.model.layer.parent[idx])
         self.layerblink_state.activate(action)
 
 
@@ -469,12 +469,14 @@ class Document (CanvasController):
 
 
     def new_layer_cb(self, action):
-        insert_idx = self.model.layer_idx
+        insert_idx = self.model.layer.get_index()
         if action.get_name() == 'NewLayerFG':
             insert_idx += 1
-        self.model.add_layer(insert_idx)
+        self.model.add_layer(insert_idx, stack=self.model.layer.parent)
         self.layerblink_state.activate(action)
-
+    
+    def new_layer_group_cb(self, action):
+        self.model.add_group(self.model.layer)
 
 #     @with_wait_cursor
     def merge_layer_cb(self, action):
@@ -487,17 +489,17 @@ class Document (CanvasController):
 
     def pick_layer_cb(self, action):
         x, y = self.tdw.get_cursor_in_model_coordinates()
-        for idx, layer in reversed(list(enumerate(self.model.layers))):
+        for layer in reversed(self.model.layers.get_flat_list()):
             if layer.locked:
                 continue
             if not layer.visible:
                 continue
             alpha = layer.get_alpha (x, y, 5) * layer.effective_opacity
             if alpha > 0.1:
-                self.model.select_layer(idx)
+                self.model.select_layer(layer)
                 self.layerblink_state.activate(action)
                 return
-        self.model.select_layer(0)
+        self.model.select_layer(self.model.layers[0])
         self.layerblink_state.activate(action)
 
 
@@ -508,15 +510,15 @@ class Document (CanvasController):
         "RaiseLayerInStack" or "LowerLayerInStack".
 
         """
-        current_layer_pos = self.model.layer_idx
+        current_layer_pos = self.model.layer.get_index()
         if action.get_name() == 'RaiseLayerInStack':
             new_layer_pos = current_layer_pos + 1
         elif action.get_name() == 'LowerLayerInStack':
             new_layer_pos = current_layer_pos - 1
         else:
             return
-        if new_layer_pos < len(self.model.layers) and new_layer_pos >= 0:
-            self.model.move_layer(current_layer_pos, new_layer_pos,
+        if new_layer_pos < len(self.model.layer.parent) and new_layer_pos >= 0:
+            self.model.move_layer(self.model.layer, new_layer_pos,
                                   select_new=True)
 
 
@@ -529,7 +531,7 @@ class Document (CanvasController):
         else:
             layer_num = self.get_number_for_nameless_layer(layer)
             name = _("Copy of Untitled layer #%d") % layer_num
-        self.model.duplicate_layer(self.model.layer_idx, name)
+        self.model.duplicate_layer(self.model.layer, name)
 
 
     def rename_layer_cb(self, action):
@@ -1066,8 +1068,8 @@ class Document (CanvasController):
 
         # Reflect position of current layer in the list.
         sel_is_top = sel_is_bottom = False
-        sel_is_bottom = doc.layer_idx == 0
-        sel_is_top = doc.layer_idx == len(doc.layers)-1
+        sel_is_bottom = doc.layer.get_index() == 0
+        sel_is_top = doc.layer.get_index() == len(doc.layer.parent)-1
         ag.get_action("RaiseLayerInStack").set_sensitive(not sel_is_top)
         ag.get_action("LowerLayerInStack").set_sensitive(not sel_is_bottom)
         ag.get_action("LayerFG").set_sensitive(not sel_is_top)

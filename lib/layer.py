@@ -14,6 +14,7 @@ from gettext import gettext as _
 import tiledsurface
 import strokemap
 import mypaintlib
+import helpers
 
 COMPOSITE_OPS = [
     # (internal-name, display-name, description)
@@ -78,6 +79,8 @@ class Layer:
         self.visible = True
         self.locked = False
         self.compositeop = compositeop
+        self.parent = None
+        self.is_stack = False
 
         #: List of content observers
         #: These callbacks are invoked when the contents of the layer change,
@@ -105,6 +108,11 @@ class Layer:
 
     def get_bbox(self):
         return self._surface.get_bbox()
+    
+    def get_index(self):
+        if not self.parent:
+            return None
+        return self.parent.index(self)
 
     def is_empty(self):
         return self._surface.is_empty()
@@ -278,3 +286,61 @@ class Layer:
             self._surface.set_symmetry_state(False, 0.0)
         else:
             self._surface.set_symmetry_state(True, center_x)
+
+class LayerStack(list):
+    """Representation of a stack of layers in the document.
+       Can hold nested substacks for grouping layers."""
+    
+    def __init__(self, parent=None, name=''):
+        list.__init__(self)
+        self.parent = parent
+        self.visible = True
+        self.locked = True
+        self.opacity = 1.0
+        self.compositeop = DEFAULT_COMPOSITE_OP
+        self.name = name
+        self.is_stack = True
+    
+    def get_index(self):
+        if not self.parent:
+            return None
+        return self.parent.index(self)
+    
+    def append(self, item):
+        item.parent = self
+        list.append(self, item)
+    
+    def remove(self, item):
+        item.parent = None
+        list.remove(self, item)
+    
+    def insert(self, idx, item):
+        item.parent = self
+        list.insert(self, idx, item)
+        
+    def __setitem__(self, idx, value):
+        old = self[idx]
+        list.__setitem__(self, idx, value)
+        old.parent = None
+        value.parent = self
+    
+    def get_flat_list(self):
+        ret = []
+        for layer in self:
+            if layer.is_stack:
+                ret.extend(layer.get_flat_list())
+            else:
+                ret.append(layer)
+        return ret
+    
+    def composite_tile(self, dst, dst_has_alpha, tx, ty, mipmap_level):
+        if self.visible:
+            for layer in self:
+                 layer.composite_tile(dst, dst_has_alpha, tx, ty, mipmap_level)
+    
+    def get_bbox(self):
+        bbox = helpers.Rect()
+        for layer in self:
+            bbox.expandToIncludeRect(layer.get_bbox())
+        return bbox
+        

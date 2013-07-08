@@ -194,9 +194,9 @@ class LoadLayer(Action):
 class MergeLayer(Action):
     """merge the current layer into dst"""
     display_name = _("Merge Layers")
-    def __init__(self, doc, dst_idx):
+    def __init__(self, doc, dst):
         self.doc = doc
-        self.dst_layer = self.doc.layers[dst_idx]
+        self.dst_layer = dst
         self.normalize_src = ConvertLayerToNormalMode(doc, doc.layer)
         self.normalize_dst = ConvertLayerToNormalMode(doc, self.dst_layer)
         self.remove_src = RemoveLayer(doc)
@@ -207,7 +207,7 @@ class MergeLayer(Action):
         assert self.doc.layer is not self.dst_layer
         self.doc.layer.merge_into(self.dst_layer)
         self.remove_src.redo()
-        self.select_dst = SelectLayer(self.doc, self.doc.layers.index(self.dst_layer))
+        self.select_dst = SelectLayer(self.doc, self.dst_layer)
         self.select_dst.redo()
         self._notify_document_observers()
     def undo(self):
@@ -229,11 +229,11 @@ class ConvertLayerToNormalMode(Action):
         self.set_opacity = SetLayerOpacity(doc, 1.0, layer)
     def redo(self):
         self.before = self.layer.save_snapshot()
-        prev_idx = self.doc.layer_idx
-        self.doc.layer_idx = self.doc.layers.index(self.layer)
+        prev = self.doc.layer
+        self.doc.layer = self.layer
         get_bg = self.doc.get_rendered_image_behind_current_layer
         self.layer.convert_to_normal_mode(get_bg)
-        self.doc.layer_idx = prev_idx
+        self.doc.layer = prev
         self.set_normal_mode.redo()
         self.set_opacity.redo()
     def undo(self):
@@ -244,23 +244,49 @@ class ConvertLayerToNormalMode(Action):
 
 class AddLayer(Action):
     display_name = _("Add Layer")
-    def __init__(self, doc, insert_idx=None, after=None, name=''):
+    def __init__(self, doc, insert_idx=None, after=None, name='', stack=None):
         self.doc = doc
+        if stack:
+            self.stack = stack
+        else:
+            self.stack = self.doc.layers
         self.insert_idx = insert_idx
         if after:
-            l_idx = self.doc.layers.index(after)
+            l_idx = after.get_index()
             self.insert_idx = l_idx + 1
+            self.stack = after.parent
         self.layer = layer.Layer(name)
         self.layer.content_observers.append(self.doc.layer_modified_cb)
         self.layer.set_symmetry_axis(self.doc.get_symmetry_axis())
     def redo(self):
-        self.doc.layers.insert(self.insert_idx, self.layer)
-        self.prev_idx = self.doc.layer_idx
-        self.doc.layer_idx = self.insert_idx
+        self.stack.insert(self.insert_idx, self.layer)
+        assert self.layer.parent is not None
+        self.prev = self.doc.layer
+        self.doc.layer = self.layer
         self._notify_document_observers()
     def undo(self):
-        self.doc.layers.remove(self.layer)
-        self.doc.layer_idx = self.prev_idx
+        self.stack.remove(self.layer)
+        self.doc.layer = self.prev
+        self._notify_document_observers()
+
+class AddGroup(Action):
+    display_name = _("Add Group")
+    def __init__(self, doc, lay, name=''):
+        self.doc = doc
+        self.layer = lay
+        self.group = layer.LayerStack(None, name)
+        self.layer.content_observers.append(self.doc.layer_modified_cb)
+    def redo(self):
+        self.stack = self.layer.parent
+        self.index = self.layer.get_index()
+        self.stack.remove(self.layer)
+        self.stack.insert(self.index, self.group)
+        self.group.append(self.layer)
+        self._notify_document_observers()
+    def undo(self):
+        self.group.remove(self.layer)
+        self.stack.remove(self.group)
+        self.stack.insert(self.index, self.layer)
         self._notify_document_observers()
 
 class RemoveLayer(Action):
@@ -272,12 +298,11 @@ class RemoveLayer(Action):
         self.layer = layer
         self.newlayer0 = None
     def redo(self):
-        if self.layer:
-            self.idx = self.doc.layers.index(self.layer)
-            self.doc.layers.remove(self.layer)
-        else:
-            self.idx = self.doc.layer_idx
-            self.layer = self.doc.layers.pop(self.doc.layer_idx)
+        if not self.layer:
+            self.layer = self.doc.layer
+        self.stack = self.layer.parent
+        self.idx = self.layer.get_index()
+        self.stack.remove(self.layer)
         if len(self.doc.layers) == 0:
             if self.newlayer0 is None:
                 ly = layer.Layer("")
@@ -285,106 +310,102 @@ class RemoveLayer(Action):
                 ly.set_symmetry_axis(self.doc.get_symmetry_axis())
                 self.newlayer0 = ly
             self.doc.layers.append(self.newlayer0)
-            self.doc.layer_idx = 0
+            self.doc.layer = self.newlayer0
             assert self.idx == 0
         else:
-            if self.doc.layer_idx == len(self.doc.layers):
-                self.doc.layer_idx -= 1
+            self.doc.layer = self.doc.layers[0] #FIXME select proper layer
         self._notify_canvas_observers([self.layer])
         self._notify_document_observers()
     def undo(self):
         if self.newlayer0 is not None:
-            self.doc.layers.remove(self.newlayer0)
-        self.doc.layers.insert(self.idx, self.layer)
-        self.doc.layer_idx = self.idx
+            self.newlayer0.parent.remove(self.newlayer0)
+        self.stack.insert(self.idx, self.layer)
+        self.doc.layer = self.layer
         self._notify_canvas_observers([self.layer])
         self._notify_document_observers()
 
 class SelectLayer(Action):
     display_name = _("Select Layer")
     automatic_undo = True
-    def __init__(self, doc, idx):
+    def __init__(self, doc, layer):
         self.doc = doc
-        self.idx = idx
+        self.layer = layer
     def redo(self):
-        assert self.idx >= 0 and self.idx < len(self.doc.layers)
-        self.prev_idx = self.doc.layer_idx
-        self.doc.layer_idx = self.idx
+        #assert self.layer in self.doc.layers
+        self.previous = self.doc.layer
+        self.doc.layer = self.layer
         self._notify_document_observers()
     def undo(self):
-        self.doc.layer_idx = self.prev_idx
+        self.doc.layer = self.previous
         self._notify_document_observers()
 
 class MoveLayer(Action):
     display_name = _("Move Layer on Canvas")
     # NOT "Move Layer" for now - old translatable string with different sense
-    def __init__(self, doc, layer_idx, dx, dy, ignore_first_redo=True):
+    def __init__(self, doc, layer, dx, dy, ignore_first_redo=True):
         self.doc = doc
-        self.layer_idx = layer_idx
+        self.layer = layer
         self.dx = dx
         self.dy = dy
         self.ignore_first_redo = ignore_first_redo
     def redo(self):
-        layer = self.doc.layers[self.layer_idx]
         if self.ignore_first_redo:
             # these are typically created interactively, after
             # the entire layer has been moved
             self.ignore_first_redo = False
         else:
-            layer.translate(self.dx, self.dy)
-        self._notify_canvas_observers([layer])
+            self.layer.translate(self.dx, self.dy)
+        self._notify_canvas_observers([self.layer])
         self._notify_document_observers()
     def undo(self):
-        layer = self.doc.layers[self.layer_idx]
-        layer.translate(-self.dx, -self.dy)
-        self._notify_canvas_observers([layer])
+        self.layer.translate(-self.dx, -self.dy)
+        self._notify_canvas_observers([self.layer])
         self._notify_document_observers()
 
 class ReorderSingleLayer(Action):
     display_name = _("Reorder Layer in Stack")
-    def __init__(self, doc, was_idx, new_idx, select_new=False):
+    def __init__(self, doc, layer, new_idx, select_new=False):
         self.doc = doc
-        self.was_idx = was_idx
+        self.layer = layer
         self.new_idx = new_idx
         self.select_new = select_new
     def redo(self):
-        moved_layer = self.doc.layers[self.was_idx]
-        self.doc.layers.remove(moved_layer)
-        self.doc.layers.insert(self.new_idx, moved_layer)
+        self.old_stack = self.layer.parent
+        self.new_stack = self.old_stack
+        self.old_idx = self.old_stack.index(self.layer)
+        self.old_stack.remove(self.layer)
+        self.new_stack.insert(self.new_idx, self.layer)
         if self.select_new:
-            self.was_selected = self.doc.layer_idx
-            self.doc.layer_idx = self.new_idx
-        self._notify_canvas_observers([moved_layer])
+            self.was_selected = self.doc.layer
+            self.doc.layer = self.layer
+        self._notify_canvas_observers([self.layer])
         self._notify_document_observers()
     def undo(self):
-        moved_layer = self.doc.layers[self.new_idx]
-        self.doc.layers.remove(moved_layer)
-        self.doc.layers.insert(self.was_idx, moved_layer)
+        self.new_stack.remove(self.layer)
+        self.old_stack.insert(self.old_idx, self.layer)
         if self.select_new:
-            self.doc.layer_idx = self.was_selected
+            self.doc.layer = self.was_selected
             self.was_selected = None
         self._notify_canvas_observers([moved_layer])
         self._notify_document_observers()
 
 class DuplicateLayer(Action):
     display_name = _("Duplicate Layer")
-    def __init__(self, doc, insert_idx=None, name=''):
+    def __init__(self, doc, lay, name=''):
         self.doc = doc
-        self.insert_idx = insert_idx
-        snapshot = self.doc.layers[self.insert_idx].save_snapshot()
+        self.layer = lay
+        snapshot = self.layer.save_snapshot()
         self.new_layer = layer.Layer(name)
         self.new_layer.load_snapshot(snapshot)
         self.new_layer.content_observers.append(self.doc.layer_modified_cb)
         self.new_layer.set_symmetry_axis(doc.get_symmetry_axis())
     def redo(self):
-        self.doc.layers.insert(self.insert_idx+1, self.new_layer)
-        self.duplicate_layer = self.doc.layers[self.insert_idx+1]
-        self._notify_canvas_observers([self.duplicate_layer])
+        self.layer.parent.insert(self.layer.get_index()+1, self.new_layer)
+        self._notify_canvas_observers([self.new_layer])
         self._notify_document_observers()
     def undo(self):
-        self.doc.layers.remove(self.duplicate_layer)
-        original_layer = self.doc.layers[self.insert_idx]
-        self._notify_canvas_observers([original_layer])
+        self.layer.parent.remove(self.new_layer)
+        self._notify_canvas_observers([self.layer])
         self._notify_document_observers()
 
 class ReorderLayers(Action):
