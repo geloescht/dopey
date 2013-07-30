@@ -1062,7 +1062,7 @@ class Document (CanvasController):
         redo_action.set_tooltip(desc)
 
 
-    def model_structure_changed_cb(self, doc):
+    def model_structure_changed_cb(self, doc, event = None):
         # Handle model structural changes.
         ag = self.action_group
 

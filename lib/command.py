@@ -274,7 +274,7 @@ class AddGroup(Action):
     def __init__(self, doc, lay, name=''):
         self.doc = doc
         self.layer = lay
-        self.group = layer.LayerStack(None, name)
+        self.group = layer.LayerStack(doc, None, name)
         self.layer.content_observers.append(self.doc.layer_modified_cb)
     def redo(self):
         self.stack = self.layer.parent
@@ -364,14 +364,16 @@ class MoveLayer(Action):
 
 class ReorderSingleLayer(Action):
     display_name = _("Reorder Layer in Stack")
-    def __init__(self, doc, layer, new_idx, select_new=False):
+    def __init__(self, doc, layer, new_idx, select_new=False, new_stack=None):
         self.doc = doc
         self.layer = layer
         self.new_idx = new_idx
+        self.new_stack = new_stack
         self.select_new = select_new
     def redo(self):
         self.old_stack = self.layer.parent
-        self.new_stack = self.old_stack
+        if not self.new_stack:
+            self.new_stack = self.old_stack
         self.old_idx = self.old_stack.index(self.layer)
         self.old_stack.remove(self.layer)
         self.new_stack.insert(self.new_idx, self.layer)
@@ -386,7 +388,7 @@ class ReorderSingleLayer(Action):
         if self.select_new:
             self.doc.layer = self.was_selected
             self.was_selected = None
-        self._notify_canvas_observers([moved_layer])
+        self._notify_canvas_observers([self.layer])
         self._notify_document_observers()
 
 class DuplicateLayer(Action):

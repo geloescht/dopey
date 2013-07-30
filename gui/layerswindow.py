@@ -7,6 +7,7 @@
 # (at your option) any later version.
 
 import pygtkcompat
+import generictreemodel
 
 import gtk
 from gtk import gdk
@@ -18,6 +19,88 @@ import dialogs
 from lib.layer import COMPOSITE_OPS
 from lib.helpers import escape
 from widgets import SPACING_CRAMPED
+
+class LayerTreeModel(generictreemodel.GenericTreeModel):
+    def __init__(self, doc):
+        generictreemodel.GenericTreeModel.__init__(self)
+        self.doc = doc
+        self.doc.doc_observers.append(self.on_event)
+    
+    def on_get_flags(self):
+        return gtk.TREE_MODEL_ITERS_PERSIST
+    
+    def on_get_n_columns(self):
+        return 1
+    
+    def on_get_column_type(self, idx):
+        return object
+    
+    def on_get_iter(self, path):
+        ret = self.doc.layers
+        for i in range(path.get_depth()):
+            assert ret.is_stack
+            ret = ret[path.get_indices()[i]]
+        return ret
+    
+    def on_get_path(self, target):
+        ret = []
+        layer = target
+        while layer.parent is not None:
+            ret.insert(0, layer.get_index())
+            layer = layer.parent
+        if len(ret) == 0:
+            return None
+        return ret
+    
+    def on_get_value(self, layer, column):
+        return layer
+    
+    def on_iter_next(self, layer):
+        if not layer:
+            raise ValueError("Layer is None")
+        if layer.parent is None:
+            print ("debug", "Groupless layer ", layer)
+            raise ValueError("Layer is not in a Group")
+        index = layer.get_index()
+        if index >= len(layer.parent)-1:
+            return None
+        return layer.parent[index+1]
+    
+    def on_iter_children(self, layer):
+        if not layer or not layer.is_stack or len(layer) == 0:
+            raise ValueError("Layer is not a group or does not have children")
+        return layer[0]
+    
+    def on_iter_has_child(self, layer):
+        if not layer:
+            return False
+        return layer.is_stack and len(layer) > 0
+    
+    def on_iter_n_children(self, layer):
+        if not layer or not iter.is_stack:
+            return 0
+        return len(layer)
+    
+    def on_iter_nth_child(self, layer, n):
+        if layer is None:
+            layer = self.doc.layers
+        if not layer.is_stack:
+            raise ValueError("Layer is not a group")
+        return layer[n]
+    
+    def on_iter_parent(self, layer):
+        if layer.parent is self.doc.layers:
+            return None
+        return layer.parent
+    
+    def on_event(self, doc, event):
+        print ("debug", "Event: ", event)
+        if event is not None and event[0] == "inserted":
+            path = self.on_get_path(event[1])
+            self.row_inserted(path, self.create_tree_iter(event[1]))
+        if event is not None and event[0] == "beforedelete":
+            self.row_deleted(self.on_get_path(event[1]))
+        
 
 def stock_button(stock_id):
     b = gtk.Button()
@@ -58,8 +141,10 @@ class ToolWidget (gtk.VBox):
 
         # Layer treeview
         # The 'object' column is a layer. All displayed columns use data from it.
-        store = self.liststore = gtk.TreeStore(object)
-        store.connect("row-deleted", self.liststore_drag_row_deleted_cb)
+        #store = self.liststore = gtk.TreeStore(object)
+        store = self.liststore = LayerTreeModel(self.app.doc.model)
+        #store.connect("row-deleted", self.liststore_drag_row_deleted_cb)
+        #store.connect("row-changed", self.liststore_drag_row_changed_cb)
         view = self.treeview = gtk.TreeView(store)
         view.connect("cursor-changed", self.treeview_cursor_changed_cb)
         view.set_reorderable(True)
@@ -172,23 +257,19 @@ class ToolWidget (gtk.VBox):
         # draws something.
         doc.stroke_observers.append(self.on_stroke)
     
-    def fill_liststore(self, stack, it=None):
-        for layer in stack:
-            newit = self.liststore.prepend(it, [layer])
-            if layer.is_stack:
-                self.fill_liststore(layer, newit)
-                
-
-    def update(self, doc):
+    
+    def update(self, doc, event = None):
         if self.is_updating:
             return
         self.is_updating = True
 
         # Update the liststore to match the master layers list in doc
         current_layer = doc.get_current_layer()
-        #FIXME: does not check if update is neccessary
-        self.liststore.clear()
-        self.fill_liststore(doc.layers)
+        if event and event[0] == "clear": #reset view
+            self.treeview.set_model(None)
+            self.treeview.set_model(self.liststore)
+        #self.liststore.clear()
+        #self.fill_liststore(doc.layers)
         self.treeview.expand_all() #FIXME: find a way to preserve the expanded-state  in updates
         
         # Queue a selection update
@@ -220,12 +301,7 @@ class ToolWidget (gtk.VBox):
         doc = self.app.doc.model
 
         # Move selection line to the model's current layer and scroll to it
-        model_sel_path = []
-        layer = doc.layer
-        while layer.parent is not None:
-            model_sel_path.append(len(layer.parent) - layer.get_index() - 1)
-            layer = layer.parent
-        model_sel_path.reverse()
+        model_sel_path = self.liststore.get_path(self.liststore.create_tree_iter(doc.layer))
 
         if pygtkcompat.USE_GTK3:
             model_sel_path = ":".join([str(s) for s in model_sel_path])
@@ -303,15 +379,27 @@ class ToolWidget (gtk.VBox):
                 rename_action.activate()
                 return True
         return False
-
+    
+    def liststore_drag_row_changed_cb(self,liststore, path, it):
+        if self.is_updating:
+            return
+        layer = liststore.get_value(it,0)
+        dst_index = path.get_indices()[path.get_depth()-1]
+        if path.get_depth() == 1: #destination in root
+            dst_stack = self.app.doc.model.layers
+        else: #destination in group
+            path.up()
+            dst_stack = liststore.get_value(liststore.get_iter(path),0)
+        self.drag = (layer, len(dst_stack) - dst_index - 1, dst_stack)
 
     def liststore_drag_row_deleted_cb(self, liststore, path):
         if self.is_updating:
             return
         # Must be internally generated
         # The only way this can happen is at the end of a drag which reorders the list.
-        self.resync_doc_layers()
-
+        print "Drag"
+        print self.drag
+        self.app.doc.model.move_layer(self.drag[0], self.drag[1], False, self.drag[2])
 
     def resync_doc_layers(self):
         assert not self.is_updating

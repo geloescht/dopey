@@ -309,7 +309,7 @@ class ToolWidget(gtk.VBox):
                                                     False)
             self._play_animation(use_lightbox=use_lightbox)
 
-    def update(self, doc):
+    def update(self, doc, event):
         return self._update()
 
     def create_list(self):

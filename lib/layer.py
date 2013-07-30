@@ -291,8 +291,9 @@ class LayerStack(list):
     """Representation of a stack of layers in the document.
        Can hold nested substacks for grouping layers."""
     
-    def __init__(self, parent=None, name=''):
+    def __init__(self, doc, parent=None, name=''):
         list.__init__(self)
+        self.doc = doc
         self.parent = parent
         self.visible = True
         self.locked = True
@@ -309,20 +310,24 @@ class LayerStack(list):
     def append(self, item):
         item.parent = self
         list.append(self, item)
+        self.doc.call_doc_observers(("inserted", item))
     
     def remove(self, item):
-        item.parent = None
+        self.doc.call_doc_observers(("beforedelete", item))
         list.remove(self, item)
+        item.parent = None
     
     def insert(self, idx, item):
         item.parent = self
         list.insert(self, idx, item)
+        self.doc.call_doc_observers(("inserted", item))
         
     def __setitem__(self, idx, value):
+        print "SETITEM CALLED!"
         old = self[idx]
         list.__setitem__(self, idx, value)
         old.parent = None
-        value.parent = self
+        value.parent = self #FIXME: Call doc observers
     
     def get_flat_list(self):
         ret = []

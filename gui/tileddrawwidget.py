@@ -561,7 +561,7 @@ class CanvasRenderer(gtk.DrawingArea, DrawCursorMixin):
         corners = [self.model_to_display(x, y) for (x, y) in corners]
         self.queue_draw_area(*helpers.rotated_rectangle_bbox(corners))
 
-    def model_structure_changed_cb(self, doc):
+    def model_structure_changed_cb(self, doc, event = None):
         # Reflect layer locked and visible flag changes
         self.update_cursor()
 

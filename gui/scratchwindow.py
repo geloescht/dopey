@@ -136,7 +136,7 @@ class ToolWidget (gtk.VBox):
         return response == gtk.RESPONSE_OK
         """
 
-    def update(self, doc):
+    def update(self, doc, event = None):
         if self.is_updating:
             return
         self.is_updating = True

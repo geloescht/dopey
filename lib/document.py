@@ -70,7 +70,7 @@ class Document():
         if not brushinfo:
             brushinfo = brush.BrushInfo()
             brushinfo.load_defaults()
-        self.layers = layer.LayerStack()
+        self.layers = layer.LayerStack(self)
         self.brush = brush.Brush(brushinfo)
         self.ani = animation.Animation(self)
 
@@ -131,7 +131,7 @@ class Document():
     frame_enabled = property(get_frame_enabled)
 
 
-    def call_doc_observers(self):
+    def call_doc_observers(self, event = None):
         """Announce major structural changes via `doc_observers`.
 
         This is invoked to announce major structural changes such as the layers
@@ -139,8 +139,9 @@ class Document():
         invoked with a single argument, `self`.
 
         """
+        
         for f in self.doc_observers:
-            f(self)
+            f(self, event)
         return True
 
 
@@ -174,8 +175,9 @@ class Document():
         self.command_stack = command.CommandStack()
         self.command_stack.stack_observers = self.command_stack_observers
         self.set_background(self.default_background)
-        self.layers = layer.LayerStack()
+        self.layers = layer.LayerStack(self)
         self.layer = None
+        self.call_doc_observers(("clear"))
         self.add_layer(0)
         self.layer = self.layers[0]
         # disallow undo of the first layer
@@ -234,7 +236,7 @@ class Document():
     def record_layer_move(self, layer, dx, dy):
         self.do(command.MoveLayer(self, layer, dx, dy, True))
 
-    def move_layer(self, layer, new_idx, select_new=False):
+    def move_layer(self, layer, new_idx, select_new=False, new_stack=None):
         self.do(command.ReorderSingleLayer(self, layer, new_idx, select_new))
 
     def duplicate_layer(self, layer, name=''):
