@@ -329,6 +329,9 @@ class LayerStack(list):
         old.parent = None
         value.parent = self #FIXME: Call doc observers
     
+    def __eq__(self, other):
+        return id(self) == id(other)
+    
     def get_flat_list(self):
         ret = []
         for layer in self:

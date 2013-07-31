@@ -66,17 +66,17 @@ class LayerTreeModel(generictreemodel.GenericTreeModel):
         return layer.parent[index]
     
     def on_iter_children(self, layer):
-        if not layer or not layer.is_stack or len(layer) == 0:
+        if layer is None or not layer.is_stack or len(layer) == 0:
             raise ValueError("Layer is not a group or does not have children")
         return layer[-1]
     
     def on_iter_has_child(self, layer):
-        if not layer:
+        if layer is None or not layer.is_stack:
             return False
-        return layer.is_stack and len(layer) > 0
+        return len(layer) > 0
     
     def on_iter_n_children(self, layer):
-        if not layer or not iter.is_stack:
+        if layer is None or not layer.is_stack:
             return 0
         return len(layer)
     
