@@ -731,7 +731,6 @@ class Document():
                       locked=False, selected=False,
                       compositeop=DEFAULT_COMPOSITE_OP, rect=[]):
             layer = ET.Element('layer')
-            stack.append(layer)
             store_surface(surface, name, rect)
             a = layer.attrib
             if layer_name:
@@ -752,25 +751,33 @@ class Document():
             if selected:
                 a['selected'] = 'true'
             return layer
+        
+        def add_stack_recursive(file_stack, doc_stack):
+            for idx, l in enumerate(reversed(doc_stack)):
+                if l.is_stack:
+                    new_file_stack = ET.SubElement(file_stack, 'stack')
+                    add_stack_recursive(new_file_stack, l)
+                else:
+                    if l.is_empty():
+                        continue
+                    opac = l.opacity
+                    x, y, w, h = l.get_bbox()
+                    sel = (idx == self.layer_idx)
+                    el = add_layer(x-x0, y-y0, opac, l._surface,
+                                   'data/layer%03d.png' % idx, l.name, l.visible,
+                                   locked=l.locked, selected=sel,
+                                   compositeop=l.compositeop, rect=(x, y, w, h))
+                    file_stack.append(el)
+                    
+                    # strokemap
+                    sio = StringIO()
+                    l.save_strokemap_to_file(sio, -x, -y)
+                    data = sio.getvalue(); sio.close()
+                    name = 'data/layer%03d_strokemap.dat' % idx
+                    el.attrib['mypaint_strokemap_v2'] = name
+                    write_file_str(name, data)
 
-        for idx, l in enumerate(reversed(self.layers)):
-            if l.is_empty():
-                continue
-            opac = l.opacity
-            x, y, w, h = l.get_bbox()
-            sel = (idx == self.layer_idx)
-            el = add_layer(x-x0, y-y0, opac, l._surface,
-                           'data/layer%03d.png' % idx, l.name, l.visible,
-                           locked=l.locked, selected=sel,
-                           compositeop=l.compositeop, rect=(x, y, w, h))
-
-            # strokemap
-            sio = StringIO()
-            l.save_strokemap_to_file(sio, -x, -y)
-            data = sio.getvalue(); sio.close()
-            name = 'data/layer%03d_strokemap.dat' % idx
-            el.attrib['mypaint_strokemap_v2'] = name
-            write_file_str(name, data)
+        add_stack_recursive(stack, self.layers)
 
         ani_data = self.ani.xsheet_as_str()
         write_file_str('animation.xsheet', ani_data)
@@ -783,6 +790,7 @@ class Document():
                       locked=True, selected=False,
                       compositeop=DEFAULT_COMPOSITE_OP,
                       rect=(x,y,w,h))
+        stack.append(l)
         x, y, w, h = bg.get_bbox()
         # save as single pattern (with corrected origin)
         store_surface(bg, 'data/background_tile.png', rect=(x+x0, y+y0, w, h))
