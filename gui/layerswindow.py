@@ -56,7 +56,7 @@ class LayerTreeModel(generictreemodel.GenericTreeModel):
         return layer
     
     def on_iter_next(self, layer):
-        if not layer:
+        if layer is None:
             raise ValueError("Layer is None")
         if layer.parent is None:
             raise ValueError("Layer is not in a Group")
