@@ -46,7 +46,7 @@ class LayerTreeModel(generictreemodel.GenericTreeModel):
         ret = []
         layer = target
         while layer.parent is not None:
-            ret.insert(0, -layer.get_index() - 1)
+            ret.insert(0, len(layer.parent) - layer.get_index() - 1)
             layer = layer.parent
         if len(ret) == 0:
             return None
@@ -60,10 +60,10 @@ class LayerTreeModel(generictreemodel.GenericTreeModel):
             raise ValueError("Layer is None")
         if layer.parent is None:
             raise ValueError("Layer is not in a Group")
-        index = -layer.get_index() - 1
-        if index >= len(layer.parent)-1:
+        index = layer.get_index() - 1
+        if index < 0:
             return None
-        return layer.parent[index+1]
+        return layer.parent[index]
     
     def on_iter_children(self, layer):
         if not layer or not layer.is_stack or len(layer) == 0:
