@@ -39,14 +39,14 @@ class LayerTreeModel(generictreemodel.GenericTreeModel):
         ret = self.doc.layers
         for i in range(path.get_depth()):
             assert ret.is_stack
-            ret = ret[path.get_indices()[i]]
+            ret = ret[-path.get_indices()[i] - 1]
         return ret
     
     def on_get_path(self, target):
         ret = []
         layer = target
         while layer.parent is not None:
-            ret.insert(0, layer.get_index())
+            ret.insert(0, -layer.get_index() - 1)
             layer = layer.parent
         if len(ret) == 0:
             return None
@@ -59,9 +59,8 @@ class LayerTreeModel(generictreemodel.GenericTreeModel):
         if not layer:
             raise ValueError("Layer is None")
         if layer.parent is None:
-            print ("debug", "Groupless layer ", layer)
             raise ValueError("Layer is not in a Group")
-        index = layer.get_index()
+        index = -layer.get_index() - 1
         if index >= len(layer.parent)-1:
             return None
         return layer.parent[index+1]
@@ -69,7 +68,7 @@ class LayerTreeModel(generictreemodel.GenericTreeModel):
     def on_iter_children(self, layer):
         if not layer or not layer.is_stack or len(layer) == 0:
             raise ValueError("Layer is not a group or does not have children")
-        return layer[0]
+        return layer[-1]
     
     def on_iter_has_child(self, layer):
         if not layer:
@@ -86,7 +85,7 @@ class LayerTreeModel(generictreemodel.GenericTreeModel):
             layer = self.doc.layers
         if not layer.is_stack:
             raise ValueError("Layer is not a group")
-        return layer[n]
+        return layer[-n-1]
     
     def on_iter_parent(self, layer):
         if layer.parent is self.doc.layers:
