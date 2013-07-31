@@ -21,15 +21,14 @@ class SelectFrame(Action):
         self.doc = doc
         self.frames = doc.ani.frames
         self.idx = idx
-        self.prev_layer_idx = None
+        self.prev_layer = None
 
     def redo(self):
         cel = self.frames.cel_at(self.idx)
         if cel is not None:
             # Select the corresponding layer:
-            layer_idx = self.doc.layers.index(cel)
-            self.prev_layer_idx = self.doc.layer_idx
-            self.doc.layer_idx = layer_idx
+            self.prev_layer = self.doc.layer
+            self.doc.layer = cel
         
         self.prev_frame_idx = self.frames.idx
         self.frames.select(self.idx)
@@ -37,8 +36,8 @@ class SelectFrame(Action):
         self._notify_document_observers()
     
     def undo(self):
-        if self.prev_layer_idx is not None:
-            self.doc.layer_idx = self.prev_layer_idx
+        if self.prev_layer is not None:
+            self.doc.layer = self.prev_layer
         
         self.frames.select(self.prev_frame_idx)
         self.doc.ani.update_opacities()
@@ -114,8 +113,8 @@ class AddCel(Action):
     
     def redo(self):
         self.doc.layers.append(self.layer)
-        self.prev_idx = self.doc.layer_idx
-        self.doc.layer_idx = len(self.doc.layers) - 1
+        self.prev = self.doc.layer
+        self.doc.layer = self.layer
         
         self.frame.add_cel(self.layer)
         self._notify_canvas_observers([self.layer])
@@ -124,7 +123,7 @@ class AddCel(Action):
     
     def undo(self):
         self.doc.layers.remove(self.layer)
-        self.doc.layer_idx = self.prev_idx
+        self.doc.layer = self.prev
         self.frame.remove_cel()
         self._notify_canvas_observers([self.layer])
         self.doc.ani.update_opacities()
@@ -136,27 +135,32 @@ class RemoveCel(Action):
         self.doc = doc
         self.frame = frame
         self.layer = self.frame.cel
-        self.prev_idx = None
+        self.prev = None
+        self.last = False
     
     def redo(self):
         num = self.doc.ani.frames.count_cel(self.layer)
         if num == 1:
             self.doc.layers.remove(self.layer)
-            self.prev_idx = self.doc.layer_idx
-            self.doc.layer_idx = len(self.doc.layers) - 1
+            self.last = True
             self._notify_canvas_observers([self.layer])
 
         self.frame.remove_cel()
+        
+        if self.layer == self.doc.layer: #removing currently selected CEL
+            self.prev = self.doc.layer
+            self.doc.layer = self.doc.ani.frames.cel_for_frame(self.frame)
 
         self.doc.ani.update_opacities()
         self._notify_document_observers()
     
     def undo(self):
-        if self.prev_idx is not None:
+        if self.last:
             self.doc.layers.append(self.layer)
-            self.doc.layer_idx = self.prev_idx
             self._notify_canvas_observers([self.layer])
-
+        
+        if self.prev is not None:
+            self.doc.layer = self.prev
         self.frame.add_cel(self.layer)
 
         self.doc.ani.update_opacities()
