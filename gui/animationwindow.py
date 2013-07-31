@@ -156,6 +156,16 @@ class ToolWidget(gtk.VBox):
         editbuttons_hbox.pack_start(cut_button)
         editbuttons_hbox.pack_start(copy_button)
         editbuttons_hbox.pack_start(paste_button)
+        
+        # track edit controls:
+        
+        insert_track_button = stock_button(gtk.STOCK_ADD) # FIXME: the same icon is used to append frames
+        insert_track_button.connect('clicked',self.on_insert_track)
+        insert_track_button.set_tooltip_text(_('Insert track'))
+        self.insert_track_button = insert_track_button
+        
+        trackbuttons_hbox = gtk.HBox()
+        trackbuttons_hbox.pack_start(insert_track_button)
 
         # lightbox controls:
 
@@ -223,6 +233,7 @@ class ToolWidget(gtk.VBox):
         controls_vbox.pack_start(buttons_hbox, expand=False)
         controls_vbox.pack_start(anibuttons_hbox, expand=False)
         controls_vbox.pack_start(editbuttons_hbox, expand=False)
+        controls_vbox.pack_start(trackbuttons_hbox, expand=False)
 
         preferences_vbox = gtk.VBox()
         preferences_vbox.pack_start(framerate_hbox, expand=False)
@@ -556,6 +567,9 @@ class ToolWidget(gtk.VBox):
 
     def on_paste(self, button):
         self.ani.paste_cel()
+        
+    def on_insert_track(self, button):
+        self.ani.insert_track('newtrack')
 
     def show_cb(self, widget):
         assert not self.expander_prefs_loaded

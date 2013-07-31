@@ -8,6 +8,7 @@
 
 from command import Action, SelectLayer
 import layer
+from framelist import FrameList
 
 def layername_from_description(description):
     layername = "CEL"
@@ -15,6 +16,22 @@ def layername_from_description(description):
         layername += " " + description
     return layername
 
+
+class CreateTrack(Action):
+    def __init__(self, doc, name=''):
+        self.doc = doc
+        self.frames = FrameList(24, self.doc.ani.opacities)
+        self.group = layer.LayerStack(self.doc, None, name)
+    
+    def redo(self):
+        self.doc.layers.append(self.group)
+        self.doc.ani.tracks.append(self.frames)
+        self._notify_document_observers()
+    
+    def undo(self):
+        self.doc.layers.remove(self.group)
+        self.doc.ani.tracks.remove(self.frames)
+        self._notify_document_observers()
 
 class SelectFrame(Action):
     def __init__(self, doc, idx):

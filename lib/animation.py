@@ -32,7 +32,8 @@ class Animation(object):
     
     def __init__(self, doc):
         self.doc = doc
-        self.frames = None
+        self.tracks = None  # list of all existing tracks (animation layers)
+        self.frames = None  # currently selected track
         self.framerate = 24.0
         self.cleared = False
         self.using_legacy = False
@@ -46,7 +47,8 @@ class Animation(object):
         self.edit_frame = None
 
     def clear_xsheet(self, init=False):
-        self.frames = FrameList(24, self.opacities)
+        self.tracks = [FrameList(24, self.opacities)]
+        self.frames = self.tracks[0]
         self.cleared = True
     
     def legacy_xsheet_as_str(self):
@@ -360,6 +362,9 @@ class Animation(object):
 
     def remove_frames(self, ammount=1):
         self.doc.do(anicommand.RemoveFrames(self.doc, ammount))
+    
+    def insert_track(self, name=''):
+        self.doc.do(anicommand.CreateTrack(self.doc, name))
 
     def can_cutcopy(self):
         frame = self.frames.get_selected()
