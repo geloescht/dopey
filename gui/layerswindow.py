@@ -100,6 +100,15 @@ class LayerTreeModel(generictreemodel.GenericTreeModel):
             self.row_inserted(path, self.create_tree_iter(event[1]))
         if event is not None and event[0] == "beforedelete":
             self.row_deleted(self.on_get_path(event[1]))
+    
+    # TODO: Fix drag when PyGObject bug is gone
+    #
+    #def do_drag_data_get(self, path):
+    #    data = gtk.SelectionData()
+    #    return (False, None)
+    #
+    #def do_row_draggable(self, path):
+    #    return True
         
 
 def stock_button(stock_id):
@@ -141,13 +150,13 @@ class ToolWidget (gtk.VBox):
 
         # Layer treeview
         # The 'object' column is a layer. All displayed columns use data from it.
-        #store = self.liststore = gtk.TreeStore(object)
         store = self.liststore = LayerTreeModel(self.app.doc.model)
+        # TODO: Re-enable drag when PyGObject bug is gone
         #store.connect("row-deleted", self.liststore_drag_row_deleted_cb)
         #store.connect("row-changed", self.liststore_drag_row_changed_cb)
         view = self.treeview = gtk.TreeView(store)
         view.connect("cursor-changed", self.treeview_cursor_changed_cb)
-        view.set_reorderable(True)
+        #view.set_reorderable(True)
         view.set_level_indentation(5)
         view.set_headers_visible(False)
         view.connect("button-press-event", self.treeview_button_press_cb)
@@ -268,9 +277,6 @@ class ToolWidget (gtk.VBox):
         if event and event[0] == "clear": #reset view
             self.treeview.set_model(None)
             self.treeview.set_model(self.liststore)
-        #self.liststore.clear()
-        #self.fill_liststore(doc.layers)
-        self.treeview.expand_all() #FIXME: find a way to preserve the expanded-state  in updates
         
         # Queue a selection update
         # This must be queued with gobject.idle_add to avoid glitches in the
@@ -299,7 +305,7 @@ class ToolWidget (gtk.VBox):
         # Updates the selection row in the list to reflect the underlying
         # document model.
         doc = self.app.doc.model
-
+        
         # Move selection line to the model's current layer and scroll to it
         model_sel_path = self.liststore.get_path(self.liststore.create_tree_iter(doc.layer))
 
@@ -380,26 +386,26 @@ class ToolWidget (gtk.VBox):
                 return True
         return False
     
-    def liststore_drag_row_changed_cb(self,liststore, path, it):
-        if self.is_updating:
-            return
-        layer = liststore.get_value(it,0)
-        dst_index = path.get_indices()[path.get_depth()-1]
-        if path.get_depth() == 1: #destination in root
-            dst_stack = self.app.doc.model.layers
-        else: #destination in group
-            path.up()
-            dst_stack = liststore.get_value(liststore.get_iter(path),0)
-        self.drag = (layer, len(dst_stack) - dst_index - 1, dst_stack)
+    # TODO: Re-enable drag when PyGObject bug is gone
+    #
+    #def liststore_drag_row_changed_cb(self,liststore, path, it):
+    #    if self.is_updating:
+    #        return
+    #    layer = liststore.get_value(it,0)
+    #    dst_index = path.get_indices()[path.get_depth()-1]
+    #    if path.get_depth() == 1: #destination in root
+    #        dst_stack = self.app.doc.model.layers
+    #    else: #destination in group
+    #        path.up()
+    #        dst_stack = liststore.get_value(liststore.get_iter(path),0)
+    #    self.drag = (layer, len(dst_stack) - dst_index - 1, dst_stack)
 
-    def liststore_drag_row_deleted_cb(self, liststore, path):
-        if self.is_updating:
-            return
-        # Must be internally generated
-        # The only way this can happen is at the end of a drag which reorders the list.
-        print "Drag"
-        print self.drag
-        self.app.doc.model.move_layer(self.drag[0], self.drag[1], False, self.drag[2])
+    #def liststore_drag_row_deleted_cb(self, liststore, path):
+    #    if self.is_updating:
+    #        return
+    #    # Must be internally generated
+    #    # The only way this can happen is at the end of a drag which reorders the list.
+    #    self.app.doc.model.move_layer(self.drag[0], self.drag[1], False, self.drag[2])
 
     def resync_doc_layers(self):
         assert not self.is_updating

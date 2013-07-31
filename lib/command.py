@@ -279,9 +279,11 @@ class AddGroup(Action):
     def redo(self):
         self.stack = self.layer.parent
         self.index = self.layer.get_index()
-        self.stack.remove(self.layer)
         self.stack.insert(self.index, self.group)
+        self.doc.layer = self.group   #avoid having floating layer selected
+        self.stack.remove(self.layer)
         self.group.append(self.layer)
+        self.doc.layer = self.layer
         self._notify_document_observers()
     def undo(self):
         self.group.remove(self.layer)
