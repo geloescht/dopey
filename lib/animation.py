@@ -366,6 +366,11 @@ class Animation(object):
     def insert_track(self, name=''):
         self.doc.do(anicommand.CreateTrack(self.doc, name))
     
+    def remove_track(self, track=None):
+        if track is None:
+            track = self.frames
+        self.doc.do(anicommand.RemoveTrack(self.doc, track))
+    
     def select_track(self, track):
         self.doc.do(anicommand.SelectTrack(self.doc, track))
 

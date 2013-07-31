@@ -30,8 +30,32 @@ class CreateTrack(Action):
     
     def undo(self):
         self.doc.layers.remove(self.group)
+        index = self.doc.ani.tracks.index(self.frames)
         self.doc.ani.tracks.remove(self.frames)
-        self.doc.call_doc_observers(("trackremoved", self.frames))
+        self.doc.call_doc_observers(("trackremoved", self.frames, index))
+        
+
+class RemoveTrack(Action):
+    def __init__(self, doc, track):
+        self.doc = doc
+        self.track = track
+    
+    def redo(self):
+        self.prev_stack = self.track.stack
+        if self.track.stack is not None:
+            self.prev_stack_parent = self.track.stack.parent
+            self.prev_stack_idx = self.track.stack.get_index()
+            self.track.stack.parent.remove(self.track.stack)
+        self.prev_track_idx = self.doc.ani.tracks.index(self.track)
+        index = self.doc.ani.tracks.index(self.track)
+        self.doc.ani.tracks.remove(self.track)
+        self.doc.call_doc_observers(("trackremoved", self.track, index))
+    
+    def undo(self):
+        if self.prev_stack is not None:
+            self.prev_stack_parent.insert(self.prev_stack_idx, self.prev_stack)
+        self.doc.ani.tracks.insert(self.prev_track_idx, self.track)
+        self.doc.call_doc_observers(("trackinserted", self.track))
 
 class SelectTrack(Action):
     def __init__(self, doc, track):

@@ -165,8 +165,14 @@ class ToolWidget(gtk.VBox):
         insert_track_button.set_tooltip_text(_('Insert track'))
         self.insert_track_button = insert_track_button
         
+        remove_track_button = stock_button(gtk.STOCK_REMOVE) # FIXME: the same icon is used to remove frames
+        remove_track_button.connect('clicked',self.on_remove_track)
+        remove_track_button.set_tooltip_text(_('Remove track'))
+        self.remove_track_button = remove_track_button
+        
         trackbuttons_hbox = gtk.HBox()
         trackbuttons_hbox.pack_start(insert_track_button)
+        trackbuttons_hbox.pack_start(remove_track_button)
 
         # lightbox controls:
 
@@ -326,9 +332,10 @@ class ToolWidget(gtk.VBox):
             self.add_track_columns(event[1])
         
         if event and event[0] == "trackremoved":
-            columns = self.treeview.get_columns() #TODO: determine which columns to remove
-            self.treeview.remove_column(columns[-1])
-            self.treeview.remove_column(columns[-2])
+            columns = self.treeview.get_columns()
+            index = event[2] * 2 + 1
+            self.treeview.remove_column(columns[index])
+            self.treeview.remove_column(columns[index+1])
 
     def update(self, doc, event):
         return self._update(event)
@@ -606,6 +613,9 @@ class ToolWidget(gtk.VBox):
         
     def on_insert_track(self, button):
         self.ani.insert_track('newtrack')
+    
+    def on_remove_track(self, button):
+        self.ani.remove_track()
 
     def show_cb(self, widget):
         assert not self.expander_prefs_loaded
