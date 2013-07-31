@@ -20,17 +20,36 @@ def layername_from_description(description):
 class CreateTrack(Action):
     def __init__(self, doc, name=''):
         self.doc = doc
-        self.frames = FrameList(24, self.doc.ani.opacities)
+        self.frames = FrameList(24, self.doc.ani.opacities, name=name)
         self.group = layer.LayerStack(self.doc, None, name)
     
     def redo(self):
         self.doc.layers.append(self.group)
         self.doc.ani.tracks.append(self.frames)
-        self._notify_document_observers()
+        self.doc.call_doc_observers(("trackinserted", self.frames))
     
     def undo(self):
         self.doc.layers.remove(self.group)
         self.doc.ani.tracks.remove(self.frames)
+        self.doc.call_doc_observers(("trackremoved", self.frames))
+
+class SelectTrack(Action):
+    def __init__(self, doc, track):
+        self.doc = doc
+        self.track = track
+    
+    def redo(self):
+        self.prev = self.doc.ani.frames
+        self.doc.ani.frames = self.track
+        self.track_idx = self.track.idx
+        self.track.select(self.prev.idx)
+        self.doc.ani.update_opacities()
+        self._notify_document_observers()
+    
+    def undo(self):
+        self.doc.ani.frames = self.prev
+        self.track.idx = self.track_idx
+        self.doc.ani.update_opacities()
         self._notify_document_observers()
 
 class SelectFrame(Action):

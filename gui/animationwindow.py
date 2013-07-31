@@ -42,7 +42,8 @@ class ToolWidget(gtk.VBox):
         # create tree view:
         self.treeview = gtk.TreeView(self.listmodel)
         self.treeview.set_rules_hint(True)
-        self.treeview.set_headers_visible(False)
+        self.treeview.set_headers_visible(True)
+        self.treeview.set_headers_clickable(True)
         treesel = self.treeview.get_selection()
         treesel.set_mode(gtk.SELECTION_SINGLE)
         self.changed_handler = treesel.connect('changed', self.on_row_changed)
@@ -284,16 +285,17 @@ class ToolWidget(gtk.VBox):
         xsheet_list = list(enumerate(self.ani.frames))
         for i, frame in xsheet_list:
             self.listmodel.append((i, frame))
-
-        column = self.treeview.get_column(0)
-        cell = column.get_cells()[0]
-        column.set_cell_data_func(cell, self.set_number)
-        column = self.treeview.get_column(1)
-        cell = column.get_cells()[0]
-        column.set_cell_data_func(cell, self.set_icon)
-        column = self.treeview.get_column(2)
-        cell = column.get_cells()[0]
-        column.set_cell_data_func(cell, self.set_description)
+        
+        # TODO: Figure out why this is here
+        #column = self.treeview.get_column(0)
+        #cell = column.get_cells()[0]
+        #column.set_cell_data_func(cell, self.set_number)
+        #column = self.treeview.get_column(1)
+        #cell = column.get_cells()[0]
+        #column.set_cell_data_func(cell, self.set_icon)
+        #column = self.treeview.get_column(2)
+        #cell = column.get_cells()[0]
+        #column.set_cell_data_func(cell, self.set_description)
 
         # reconnect treeview:
         self.treeview.set_model(self.listmodel)
@@ -303,7 +305,7 @@ class ToolWidget(gtk.VBox):
         self.on_opacityfactor_changed()
         self.setup_lightbox()
 
-    def _update(self):
+    def _update(self, event=None):
         if self.ani.cleared:
             self.setup()
             self.ani.cleared = False
@@ -319,9 +321,17 @@ class ToolWidget(gtk.VBox):
             use_lightbox = self.app.preferences.get("xsheet.play_lightbox",
                                                     False)
             self._play_animation(use_lightbox=use_lightbox)
+        
+        if event and event[0] == "trackinserted":
+            self.add_track_columns(event[1])
+        
+        if event and event[0] == "trackremoved":
+            columns = self.treeview.get_columns() #TODO: determine which columns to remove
+            self.treeview.remove_column(columns[-1])
+            self.treeview.remove_column(columns[-2])
 
     def update(self, doc, event):
-        return self._update()
+        return self._update(event)
 
     def create_list(self):
         xsheet_list = list(enumerate(self.ani.frames))
@@ -329,6 +339,35 @@ class ToolWidget(gtk.VBox):
         for i, frame in xsheet_list:
             listmodel.append((i, frame))
         return listmodel
+    
+    def on_track_selected(self, column):
+       column.set_sort_indicator(True)
+       track_idx = (self.treeview.get_columns().index(column) - 1) / 2
+       self.ani.select_track(self.ani.tracks[track_idx])
+    
+    def add_track_columns(self, frames):
+        font = pango.FontDescription('normal 8')
+        # icon column
+        icon_cell = gtk.CellRendererPixbuf()
+        icon_col = gtk.TreeViewColumn("")
+        icon_col.pack_start(icon_cell, expand=False)
+        icon_col.add_attribute(icon_cell, 'pixbuf', 0)
+        icon_col.set_sizing(gtk.TREE_VIEW_COLUMN_FIXED)
+        icon_col.set_fixed_width(50)
+        icon_col.set_cell_data_func(icon_cell, self.set_icon, frames)
+
+        # description column
+        desc_cell = gtk.CellRendererText()
+        desc_cell.set_property('font-desc', font)
+        description_col = gtk.TreeViewColumn(frames.name)
+        description_col.pack_start(desc_cell, True)
+        description_col.set_cell_data_func(desc_cell, self.set_description, frames)
+        description_col.set_clickable(True)
+        description_col.connect('clicked', self.on_track_selected)
+        
+        self.treeview.append_column(icon_col)
+        self.treeview.append_column(description_col)
+        
     
     def add_columns(self):
         listmodel = self.treeview.get_model()
@@ -343,28 +382,11 @@ class ToolWidget(gtk.VBox):
         framenumber_col.set_sizing(gtk.TREE_VIEW_COLUMN_FIXED)
         framenumber_col.set_fixed_width(50)
         framenumber_col.set_cell_data_func(frameno_cell, self.set_number)
-
-        # icon column
-
-        icon_cell = gtk.CellRendererPixbuf()
-        icon_col = gtk.TreeViewColumn(_("Status"))
-        icon_col.pack_start(icon_cell, expand=False)
-        icon_col.add_attribute(icon_cell, 'pixbuf', 0)
-        icon_col.set_sizing(gtk.TREE_VIEW_COLUMN_FIXED)
-        icon_col.set_fixed_width(50)
-        icon_col.set_cell_data_func(icon_cell, self.set_icon)
-
-        # description column
-
-        desc_cell = gtk.CellRendererText()
-        desc_cell.set_property('font-desc', font)
-        description_col = gtk.TreeViewColumn(_("Description"))
-        description_col.pack_start(desc_cell, True)
-        description_col.set_cell_data_func(desc_cell, self.set_description)
-
+        
         self.treeview.append_column(framenumber_col)
-        self.treeview.append_column(icon_col)
-        self.treeview.append_column(description_col)
+        
+        for track in self.ani.tracks:
+            self.add_track_columns(track)
         
     def _change_player_buttons(self):
         if self.is_playing:
@@ -438,11 +460,13 @@ class ToolWidget(gtk.VBox):
         cell.set_property('text', str(idx+1))
         
     def set_description(self, column, cell, model, it, data):
-        frame = model.get_value(it, COLUMNS_ID['frame_data'])
+        #frame = model.get_value(it, COLUMNS_ID['frame_data'])
+        frame = data[model.get_value(it, COLUMNS_ID['frame_index'])]
         cell.set_property('text', frame.description)
         
     def set_icon(self, column, cell, model, it, data):
-        frame = model.get_value(it, COLUMNS_ID['frame_data'])
+        #frame = model.get_value(it, COLUMNS_ID['frame_data'])
+        frame = data[model.get_value(it, COLUMNS_ID['frame_index'])]
         pixname = 'frame'
         if frame.cel is not None:
             pixname += '_cel'

@@ -365,6 +365,9 @@ class Animation(object):
     
     def insert_track(self, name=''):
         self.doc.do(anicommand.CreateTrack(self.doc, name))
+    
+    def select_track(self, track):
+        self.doc.do(anicommand.SelectTrack(self.doc, track))
 
     def can_cutcopy(self):
         frame = self.frames.get_selected()

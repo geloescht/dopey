@@ -58,9 +58,10 @@ class FrameList(list):
     The list of frames that constitutes an animation.
     
     """
-    def __init__(self, length, opacities=None, active_cels=None, nextprev=None):
+    def __init__(self, length, opacities=None, active_cels=None, nextprev=None, name=''):
         self.append_frames(length)
         self.idx = 0
+        self.name = name
         if opacities is None:
             opacities = {}
         self.opacities = dict(DEFAULT_OPACITIES)
