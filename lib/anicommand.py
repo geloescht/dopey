@@ -197,14 +197,19 @@ class RemoveCel(Action):
     def __init__(self, doc, frame):
         self.doc = doc
         self.frame = frame
+        self.frames = self.doc.ani.frames
+        self.stack = self.frames.stack
+        if self.stack is None:
+            self.stack = self.doc.layers
         self.layer = self.frame.cel
         self.prev = None
         self.last = False
     
     def redo(self):
-        num = self.doc.ani.frames.count_cel(self.layer)
+        num = self.frames.count_cel(self.layer)
         if num == 1:
-            self.doc.layers.remove(self.layer)
+            self.prev_idx = self.layer.get_index()
+            self.stack.remove(self.layer)
             self.last = True
             self._notify_canvas_observers([self.layer])
 
@@ -212,14 +217,18 @@ class RemoveCel(Action):
         
         if self.layer == self.doc.layer: #removing currently selected CEL
             self.prev = self.doc.layer
-            self.doc.layer = self.doc.ani.frames.cel_for_frame(self.frame)
+            selected_cel = self.frames.cel_for_frame(self.frame)
+            if selected_cel is None:
+                self.doc.layer = self.doc.layers[0]
+            else:
+                self.doc.layer = selected_cel
 
         self.doc.ani.update_opacities()
         self._notify_document_observers()
     
     def undo(self):
         if self.last:
-            self.doc.layers.append(self.layer)
+            self.stack.insert(self.prev_idx, self.layer)
             self._notify_canvas_observers([self.layer])
         
         if self.prev is not None:
@@ -237,12 +246,14 @@ class AppendFrames(Action):
         self.length = length
 
     def redo(self):
-        self.frames.append_frames(self.length)
+        for track in self.doc.ani.tracks:
+            track.append_frames(self.length)
         self.doc.ani.cleared = True
         self._notify_document_observers()
 
     def undo(self):
-        self.frames.remove_frames(self.length)
+        for track in self.doc.ani.tracks:
+            track.remove_frames(self.length)
         self.doc.ani.cleared = True
         self._notify_document_observers()
 
@@ -255,12 +266,14 @@ class InsertFrames(Action):
         self.length = length
 
     def redo(self):
-        self.frames.insert_empty_frames(self.length)
+        for track in self.doc.ani.tracks:
+            track.insert_empty_frames(self.length)
         self.doc.ani.cleared = True
         self._notify_document_observers()
 
     def undo(self):
-        self.frames.remove_frames(self.length)
+        for track in self.doc.ani.tracks:
+            track.remove_frames(self.length)
         self.doc.ani.cleared = True
         self._notify_document_observers()
 
