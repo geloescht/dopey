@@ -464,6 +464,18 @@ class ToolWidget(gtk.VBox):
         frame = data[model.get_value(it, COLUMNS_ID['frame_index'])]
         cell.set_property('text', frame.description)
         
+        #indicate selected track by background color
+        track_idx = (self.treeview.get_columns().index(column) - 1) / 2
+        
+        style = self.treeview.get_style_context()
+        
+        if self.ani.frames == self.ani.tracks[track_idx]:
+            color = style.get_background_color(gtk.StateFlags.SELECTED)
+        else:
+            color = style.get_background_color(gtk.StateFlags.NORMAL)
+            
+        cell.set_property('cell-background-rgba', color)
+        
     def set_icon(self, column, cell, model, it, data):
         #frame = model.get_value(it, COLUMNS_ID['frame_data'])
         frame = data[model.get_value(it, COLUMNS_ID['frame_index'])]
