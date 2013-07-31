@@ -20,8 +20,8 @@ def layername_from_description(description):
 class CreateTrack(Action):
     def __init__(self, doc, name=''):
         self.doc = doc
-        self.frames = FrameList(24, self.doc.ani.opacities, name=name)
         self.group = layer.LayerStack(self.doc, None, name)
+        self.frames = FrameList(24, self.doc.ani.opacities, name=name, stack=self.group)
     
     def redo(self):
         self.doc.layers.append(self.group)
@@ -148,7 +148,10 @@ class AddCel(Action):
         self.layer._surface.observers.append(self.doc.layer_modified_cb)
     
     def redo(self):
-        self.doc.layers.append(self.layer)
+        self.stack = self.doc.ani.frames.stack
+        if self.stack is None:
+            self.stack = self.doc.layers
+        self.stack.append(self.layer)
         self.prev = self.doc.layer
         self.doc.layer = self.layer
         
@@ -158,7 +161,7 @@ class AddCel(Action):
         self._notify_document_observers()
     
     def undo(self):
-        self.doc.layers.remove(self.layer)
+        self.stack.remove(self.layer)
         self.doc.layer = self.prev
         self.frame.remove_cel()
         self._notify_canvas_observers([self.layer])
