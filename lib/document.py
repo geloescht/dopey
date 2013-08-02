@@ -176,10 +176,8 @@ class Document():
         self.command_stack.stack_observers = self.command_stack_observers
         self.set_background(self.default_background)
         self.layers = layer.LayerStack(self)
-        self.layer = None
-        self.call_doc_observers(("clear"))
-        self.add_layer(0)
-        self.layer = self.layers[0]
+        self.layer = layer.Layer()
+        self.layers.append(self.layer)
         # disallow undo of the first layer
         self.command_stack.clear()
         self.unsaved_painting_time = 0.0
@@ -189,7 +187,7 @@ class Document():
                 f(*bbox)
 
         self.ani.clear_xsheet(init)
-        self.call_doc_observers()
+        self.call_doc_observers(("clear", ))
 
     def get_current_layer(self):
         return self.layer

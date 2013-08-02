@@ -25,6 +25,7 @@ class LayerTreeModel(generictreemodel.GenericTreeModel):
         generictreemodel.GenericTreeModel.__init__(self)
         self.doc = doc
         self.doc.doc_observers.append(self.on_event)
+        self.leak_references = False
     
     def on_get_flags(self):
         return gtk.TREE_MODEL_ITERS_PERSIST
@@ -66,8 +67,10 @@ class LayerTreeModel(generictreemodel.GenericTreeModel):
         return layer.parent[index]
     
     def on_iter_children(self, layer):
-        if layer is None or not layer.is_stack or len(layer) == 0:
-            raise ValueError("Layer is not a group or does not have children")
+        if layer is None:
+            return self.doc.layers[0]
+        if not layer.is_stack or len(layer) == 0:
+            return None
         return layer[-1]
     
     def on_iter_has_child(self, layer):
@@ -76,15 +79,17 @@ class LayerTreeModel(generictreemodel.GenericTreeModel):
         return len(layer) > 0
     
     def on_iter_n_children(self, layer):
-        if layer is None or not layer.is_stack:
+        if layer is None:
+            return len(self.doc.layers)
+        if  not layer.is_stack:
             return 0
         return len(layer)
     
     def on_iter_nth_child(self, layer, n):
         if layer is None:
             layer = self.doc.layers
-        if not layer.is_stack:
-            raise ValueError("Layer is not a group")
+        if not layer.is_stack or len(layer) < n+1:
+            return None
         return layer[-n-1]
     
     def on_iter_parent(self, layer):
@@ -93,7 +98,6 @@ class LayerTreeModel(generictreemodel.GenericTreeModel):
         return layer.parent
     
     def on_event(self, doc, event):
-        print ("debug", "Event: ", event)
         if event is not None and event[0] == "inserted":
             path = self.on_get_path(event[1])
             self.row_inserted(path, self.create_tree_iter(event[1]))
