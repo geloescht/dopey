@@ -158,14 +158,7 @@ class Document():
         registered `symmetry_observers` are called without arguments.
         """
         # TODO: make this undoable?
-        def recurse(layer):
-            if layer.is_stack:
-               for sub in layer:
-                   recurse(sub)
-            else:
-                layer.set_symmetry_axis(x)
-        
-        recurse(self.layers)
+        self.layers.foreach(lambda layer: layer.set_symmetry_axis(x))
             
         self.__symmetry_axis = x
         for func in self.symmetry_observers:

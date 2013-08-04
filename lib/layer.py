@@ -341,6 +341,13 @@ class LayerStack(list):
                 ret.append(layer)
         return ret
     
+    def foreach(self, func):
+        for x in self:
+            if x.is_stack:
+                x.foreach(func)
+            else:
+                func(x)
+    
     def composite_tile(self, dst, dst_has_alpha, tx, ty, mipmap_level):
         if self.visible:
             for layer in self:
