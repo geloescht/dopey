@@ -760,7 +760,7 @@ class Document():
                         continue
                     opac = l.opacity
                     x, y, w, h = l.get_bbox()
-                    sel = (idx == self.layer_idx)
+                    sel = (l == self.layer)
                     el = add_layer(x-x0, y-y0, opac, l._surface,
                                    'data/layer%03d.png' % idx, l.name, l.visible,
                                    locked=l.locked, selected=sel,
@@ -925,7 +925,7 @@ class Document():
                 selected_layer = None
                 for sub_element in element:
                     selected_sub_layer = load_layer(sub_element, stack, x, y)
-                    if selected_layer is not None:
+                    if selected_sub_layer is not None:
                         selected_layer = selected_sub_layer
                 return selected_layer
             else:
