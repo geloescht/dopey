@@ -750,11 +750,11 @@ class Document():
                 a['selected'] = 'true'
             return layer
         
-        def add_stack_recursive(file_stack, doc_stack):
-            for idx, l in enumerate(reversed(doc_stack)):
+        def add_stack_recursive(file_stack, doc_stack, idx = 0):
+            for l in reversed(doc_stack):
                 if l.is_stack:
                     new_file_stack = ET.SubElement(file_stack, 'stack')
-                    add_stack_recursive(new_file_stack, l)
+                    idx = add_stack_recursive(new_file_stack, l, idx)
                 else:
                     if l.is_empty():
                         continue
@@ -774,6 +774,8 @@ class Document():
                     name = 'data/layer%03d_strokemap.dat' % idx
                     el.attrib['mypaint_strokemap_v2'] = name
                     write_file_str(name, data)
+                    idx += 1
+            return idx
 
         add_stack_recursive(stack, self.layers)
 
