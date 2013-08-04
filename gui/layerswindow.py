@@ -26,6 +26,7 @@ class LayerTreeModel(generictreemodel.GenericTreeModel):
         self.doc = doc
         self.doc.doc_observers.append(self.on_event)
         self.leak_references = False
+        self.is_updating = False
     
     def on_get_flags(self):
         return gtk.TREE_MODEL_ITERS_PERSIST
@@ -98,11 +99,13 @@ class LayerTreeModel(generictreemodel.GenericTreeModel):
         return layer.parent
     
     def on_event(self, doc, event):
+        self.is_updating = True
         if event is not None and event[0] == "inserted":
             path = self.on_get_path(event[1])
             self.row_inserted(path, self.create_tree_iter(event[1]))
         if event is not None and event[0] == "beforedelete":
             self.row_deleted(self.on_get_path(event[1]))
+        self.is_updating = False
     
     # TODO: Fix drag when PyGObject bug is gone
     #
@@ -348,7 +351,7 @@ class ToolWidget (gtk.VBox):
 
 
     def treeview_cursor_changed_cb(self, treeview, *data):
-        if self.is_updating:
+        if self.is_updating or self.liststore.is_updating:
             return
         selection = treeview.get_selection()
         if selection is None:
