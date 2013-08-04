@@ -246,7 +246,7 @@ class AddLayer(Action):
     display_name = _("Add Layer")
     def __init__(self, doc, insert_idx=None, after=None, name='', stack=None):
         self.doc = doc
-        if stack:
+        if stack is not None:
             self.stack = stack
         else:
             self.stack = self.doc.layers
@@ -260,7 +260,7 @@ class AddLayer(Action):
         self.layer.set_symmetry_axis(self.doc.get_symmetry_axis())
     def redo(self):
         self.stack.insert(self.insert_idx, self.layer)
-        assert self.layer.parent is not None
+        assert self.layer.parent is self.stack
         self.prev = self.doc.layer
         self.doc.layer = self.layer
         self._notify_document_observers()
@@ -285,8 +285,8 @@ class AddGroup(Action):
             self.stack = stack
             self.index = index
         self.group = layer.LayerStack(doc, None, name)
-        self.selected = False
-        self.layer.content_observers.append(self.doc.layer_modified_cb)
+        if self.layer is not None:
+            self.layer.content_observers.append(self.doc.layer_modified_cb)
     def redo(self):
         self.stack.insert(self.index, self.group)
         self.prev_selected = self.doc.layer

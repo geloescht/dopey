@@ -921,10 +921,13 @@ class Document():
                     return None
             
             elif element.tag == 'stack':
-                #FIXME: add empty layer stack
+                sub_stack = self.layers
+                if stack is not None:
+                    self.add_group(None, stack=stack, index=0)
+                    sub_stack = stack[0]
                 selected_layer = None
                 for sub_element in element:
-                    selected_sub_layer = load_layer(sub_element, stack, x, y)
+                    selected_sub_layer = load_layer(sub_element, sub_stack, x, y)
                     if selected_sub_layer is not None:
                         selected_layer = selected_sub_layer
                 return selected_layer
@@ -932,7 +935,7 @@ class Document():
                 print 'Warning: ignoring unsupported tag:', element.tag
 
         
-        selected_layer = load_layer(stack, self.layers)
+        selected_layer = load_layer(stack, None)
 
         if len(self.layers) == 1:
             # no assertion (allow empty documents)
