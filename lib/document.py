@@ -852,85 +852,87 @@ class Document():
             fp.close()
             print '  %.3fs loading %s' % (time.time() - t1, filename)
             return res
-
-        def get_layers_list(root, x=0,y=0):
-            res = []
-            for item in root:
-                if item.tag == 'layer':
-                    if 'x' in item.attrib:
-                        item.attrib['x'] = int(item.attrib['x']) + x
-                    if 'y' in item.attrib:
-                        item.attrib['y'] = int(item.attrib['y']) + y
-                    res.append(item)
-                elif item.tag == 'stack':
-                    stack_x = int( item.attrib.get('x', 0) )
-                    stack_y = int( item.attrib.get('y', 0) )
-                    res += get_layers_list(item, stack_x, stack_y)
-                else:
-                    print 'Warning: ignoring unsupported tag:', item.tag
-            return res
-
+        
         self.clear() # this leaves one empty layer
-        no_background = True
         self.set_frame(width=w, height=h)
+        
+        # returns selected layer
+        def load_layer(element, stack, x=0,y=0):
+            if 'x' in element.attrib:
+                x += int(element.attrib['x'])
+            if 'y' in element.attrib:
+                y += int(element.attrib['y'])
+            
+            if element.tag == 'layer':
+                a = element.attrib
 
-        selected_layer = None
-        for layer in get_layers_list(stack):
-            a = layer.attrib
+                if 'background_tile' in a:
+                    try:
+                        print a['background_tile']
+                        self.set_background(get_pixbuf(a['background_tile']))
+                        return None
+                    except tiledsurface.BackgroundError, e:
+                        print 'ORA background tile not usable:', e
 
-            if 'background_tile' in a:
-                assert no_background
-                try:
-                    print a['background_tile']
-                    self.set_background(get_pixbuf(a['background_tile']))
-                    no_background = False
-                    continue
-                except tiledsurface.BackgroundError, e:
-                    print 'ORA background tile not usable:', e
+                src = a.get('src', '')
+                if not src.lower().endswith('.png'):
+                    print 'Warning: ignoring non-png layer'
+                    return None
+                name = a.get('name', '')
+                opac = float(a.get('opacity', '1.0'))
+                compositeop = str(a.get('composite-op', DEFAULT_COMPOSITE_OP))
+                if compositeop not in VALID_COMPOSITE_OPS:
+                    compositeop = DEFAULT_COMPOSITE_OP
+                selected = self.__xsd2bool(a.get("selected", 'false'))
+                locked = self.__xsd2bool(a.get("edit-locked", 'false'))
 
-            src = a.get('src', '')
-            if not src.lower().endswith('.png'):
-                print 'Warning: ignoring non-png layer'
-                continue
-            name = a.get('name', '')
-            x = int(a.get('x', '0'))
-            y = int(a.get('y', '0'))
-            opac = float(a.get('opacity', '1.0'))
-            compositeop = str(a.get('composite-op', DEFAULT_COMPOSITE_OP))
-            if compositeop not in VALID_COMPOSITE_OPS:
-                compositeop = DEFAULT_COMPOSITE_OP
-            selected = self.__xsd2bool(a.get("selected", 'false'))
-            locked = self.__xsd2bool(a.get("edit-locked", 'false'))
+                visible = not 'hidden' in a.get('visibility', 'visible')
+                self.add_layer(insert_idx=0, name=name, stack=stack)
+                t1 = time.time()
 
-            visible = not 'hidden' in a.get('visibility', 'visible')
-            self.add_layer(insert_idx=0, name=name)
-            t1 = time.time()
+                # extract the png form the zip into a file first
+                # the overhead for doing so seems to be neglegible (around 5%)
+                z.extract(src, tempdir)
+                tmp_filename = join(tempdir, src)
+                self.load_layer_from_png(tmp_filename, x, y, feedback_cb)
+                os.remove(tmp_filename)
 
-            # extract the png form the zip into a file first
-            # the overhead for doing so seems to be neglegible (around 5%)
-            z.extract(src, tempdir)
-            tmp_filename = join(tempdir, src)
-            self.load_layer_from_png(tmp_filename, x, y, feedback_cb)
-            os.remove(tmp_filename)
+                layer = stack[0]
 
-            layer = self.layers[0]
+                self.set_layer_opacity(helpers.clamp(opac, 0.0, 1.0), layer)
+                self.set_layer_compositeop(compositeop, layer)
+                self.set_layer_visibility(visible, layer)
+                self.set_layer_locked(locked, layer)
 
-            self.set_layer_opacity(helpers.clamp(opac, 0.0, 1.0), layer)
-            self.set_layer_compositeop(compositeop, layer)
-            self.set_layer_visibility(visible, layer)
-            self.set_layer_locked(locked, layer)
-            if selected:
-                selected_layer = layer
-            print '  %.3fs loading and converting layer png' % (time.time() - t1)
-            # strokemap
-            fname = a.get('mypaint_strokemap_v2', None)
-            if fname:
-                if x % N or y % N:
-                    print 'Warning: dropping non-aligned strokemap'
+                print '  %.3fs loading and converting layer png' % (time.time() - t1)
+                # strokemap
+                fname = a.get('mypaint_strokemap_v2', None)
+                if fname:
+                    if x % N or y % N:
+                        print 'Warning: dropping non-aligned strokemap'
+                    else:
+                        sio = StringIO(z.read(fname))
+                        layer.load_strokemap_from_file(sio, x, y)
+                        sio.close()
+                
+                if selected:
+                    return layer
                 else:
-                    sio = StringIO(z.read(fname))
-                    layer.load_strokemap_from_file(sio, x, y)
-                    sio.close()
+                    return None
+            
+            elif element.tag == 'stack':
+                #FIXME: add empty layer stack
+                selected_layer = None
+                for sub_element in element:
+                    selected_sub_layer = load_layer(sub_element, stack, x, y)
+                    if selected_layer is not None:
+                        selected_layer = selected_sub_layer
+                return selected_layer
+            else:
+                print 'Warning: ignoring unsupported tag:', element.tag
+
+        
+        selected_layer = load_layer(stack, self.layers)
 
         if len(self.layers) == 1:
             # no assertion (allow empty documents)
