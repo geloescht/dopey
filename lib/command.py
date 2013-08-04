@@ -270,26 +270,38 @@ class AddLayer(Action):
         self._notify_document_observers()
 
 class AddGroup(Action):
+    """Adds an empty group or wraps a layer inside a group
+    """
     display_name = _("Add Group")
-    def __init__(self, doc, lay, name=''):
+    def __init__(self, doc, lay=None, name='', stack=None, index=0):
         self.doc = doc
         self.layer = lay
+        if stack is None and self.layer is None:
+            self.layer = self.doc.layer
+        if stack is None:
+            self.stack = self.layer.parent
+            self.index = self.layer.get_index()
+        else:
+            self.stack = stack
+            self.index = index
         self.group = layer.LayerStack(doc, None, name)
+        self.selected = False
         self.layer.content_observers.append(self.doc.layer_modified_cb)
     def redo(self):
-        self.stack = self.layer.parent
-        self.index = self.layer.get_index()
         self.stack.insert(self.index, self.group)
+        self.prev_selected = self.doc.layer
         self.doc.layer = self.group   #avoid having floating layer selected
-        self.stack.remove(self.layer)
-        self.group.append(self.layer)
-        self.doc.layer = self.layer
+        if self.layer is not None:
+            self.stack.remove(self.layer)
+            self.group.append(self.layer)
+        self.doc.layer = self.prev_selected
         self._notify_document_observers()
     def undo(self):
         self.doc.layer = self.group  #avoid having floating layer selected
-        self.group.remove(self.layer)
-        self.stack.insert(self.index, self.layer)
-        self.doc.layer = self.layer
+        if self.layer is not None:
+            self.group.remove(self.layer)
+            self.stack.insert(self.index, self.layer)
+        self.doc.layer = self.prev_selected
         self.stack.remove(self.group)
         self._notify_document_observers()
 

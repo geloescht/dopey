@@ -418,8 +418,8 @@ class Document():
     def add_layer(self, insert_idx=None, after=None, name='', stack=None):
         self.do(command.AddLayer(self, insert_idx, after, name, stack))
     
-    def add_group(self, layer, name=''):
-        self.do(command.AddGroup(self, layer, name))
+    def add_group(self, layer, name='', stack=None, index=0):
+        self.do(command.AddGroup(self, layer, name, stack, index))
 
     def remove_layer(self,layer=None):
         self.do(command.RemoveLayer(self, layer))
